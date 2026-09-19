@@ -1,7 +1,13 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 import { getChat, reactToMessage, sendMessage, suggestOpeners, unmatch } from "@/lib/aura-api";
-import { VIBE_REACTIONS, type ChatMessage, type DimensionKey, type Profile } from "@/lib/aura";
+import {
+  DIMENSIONS,
+  VIBE_REACTIONS,
+  type ChatMessage,
+  type DimensionKey,
+  type Profile,
+} from "@/lib/aura";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -121,8 +127,11 @@ function ChatPage() {
           <div className="rounded-xl border border-border bg-surface px-4 py-5">
             <p className="font-display text-xl">Start specific</p>
             <p className="mt-2 text-sm text-muted">
-              You overlap on {shared.length ? shared.join(", ") : "a quiet frequency"}.
-              Ask Vicinity Vibe for a first line, or write your own.
+              You overlap on{" "}
+              {shared.length
+                ? shared.map((key) => DIMENSIONS[key].label).join(", ")
+                : "a quiet frequency"}
+              . Ask Vicinity Vibe for a first line, or write your own.
             </p>
             <Button
               variant="outline"

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { BadgeCheck } from "lucide-react";
 import {
   DIMENSIONS,
@@ -15,9 +16,11 @@ import { cn } from "@/lib/utils";
 export function ProfileView({
   person,
   className,
+  actions,
 }: {
   person: Profile | DiscoverCard;
   className?: string;
+  actions?: ReactNode;
 }) {
   const photo = person.photos[0];
   const color = vibeColor(person);
@@ -27,7 +30,7 @@ export function ProfileView({
   return (
     <article className={cn("flex flex-col", className)}>
       <div className="relative overflow-hidden rounded-xl bg-elevated">
-        <div className="relative aspect-[3/4] w-full">
+        <div className="relative aspect-[4/5] max-h-[46dvh] w-full">
           {photo ? (
             <img
               src={photo}
@@ -43,43 +46,42 @@ export function ProfileView({
               }}
             />
           )}
-          <div className="absolute inset-0 bg-linear-to-t from-bg via-bg/20 to-transparent" />
-          <div className="absolute inset-x-0 bottom-0 flex items-end gap-3 p-4">
-            <VibeOrb
-              primary={person.primary}
-              secondary={person.secondary}
-              saturation={person.saturation}
-              brightness={person.brightness}
-              size="md"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <h2 className="truncate font-display text-2xl font-medium tracking-tight">
-                  {person.displayName}
-                </h2>
-                {person.verified ? (
-                  <BadgeCheck className="size-4 shrink-0 text-ok" strokeWidth={1.75} />
-                ) : null}
-              </div>
-              <p className="truncate text-sm text-fg/80">
-                {person.pronouns}
-                {person.pronouns && person.neighborhood ? " · " : ""}
-                {person.neighborhood}
-              </p>
-            </div>
-            {compat != null ? (
-              <div className="text-right">
-                <p className="font-display text-2xl font-medium tabular-nums leading-none">
-                  {compat}
-                </p>
-                <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted">
-                  freq
-                </p>
-              </div>
-            ) : null}
-          </div>
+          <div className="absolute inset-0 bg-linear-to-t from-bg/80 via-transparent to-transparent" />
         </div>
       </div>
+
+      <div className="flex items-end gap-3 px-1 pt-4">
+        <VibeOrb
+          primary={person.primary}
+          secondary={person.secondary}
+          saturation={person.saturation}
+          brightness={person.brightness}
+          size="md"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <h2 className="truncate font-display text-2xl font-medium tracking-tight">
+              {person.displayName}
+            </h2>
+            {person.verified ? (
+              <BadgeCheck className="size-4 shrink-0 text-ok" strokeWidth={1.75} />
+            ) : null}
+          </div>
+          <p className="truncate text-sm text-muted">
+            {person.pronouns}
+            {person.pronouns && person.neighborhood ? " · " : ""}
+            {person.neighborhood}
+          </p>
+        </div>
+        {compat != null ? (
+          <div className="text-right">
+            <p className="font-display text-2xl font-medium tabular-nums leading-none">{compat}</p>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-muted">freq</p>
+          </div>
+        ) : null}
+      </div>
+
+      {actions}
 
       <div className="flex flex-col gap-5 px-1 pt-5">
         {person.voiceIntro ? (

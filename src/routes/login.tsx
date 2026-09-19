@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
+import { grokOAuthOnHost } from "@/lib/auth/oauth-availability";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,11 @@ function Login() {
   const [password, setPassword] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showOAuth, setShowOAuth] = useState(false);
+
+  useEffect(() => {
+    setShowOAuth(grokOAuthOnHost(window.location.hostname));
+  }, []);
 
   useEffect(() => {
     if (!sessionPending && user) void navigate({ to: "/" });
@@ -166,21 +172,23 @@ function Login() {
           >
             {mode === "sign-up" ? "Already have an account? Sign in" : "New here? Create an account"}
           </button>
-          <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6">
-            {GROK_PROVIDERS.map((provider) => (
-              <Button
-                key={provider.providerId}
-                type="button"
-                size="lg"
-                variant="outline"
-                className="w-full"
-                onClick={() => void signIn(provider.providerId, { callbackURL: "/" })}
-                disabled={pending}
-              >
-                Continue with {provider.label}
-              </Button>
-            ))}
-          </div>
+          {showOAuth ? (
+            <div className="mt-8 flex flex-col gap-3 border-t border-border pt-6">
+              {GROK_PROVIDERS.map((provider) => (
+                <Button
+                  key={provider.providerId}
+                  type="button"
+                  size="lg"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => void signIn(provider.providerId, { callbackURL: "/" })}
+                  disabled={pending}
+                >
+                  Continue with {provider.label}
+                </Button>
+              ))}
+            </div>
+          ) : null}
         </>
       ) : (
         <p className="mt-8 text-sm text-muted">Sign-in is disabled.</p>

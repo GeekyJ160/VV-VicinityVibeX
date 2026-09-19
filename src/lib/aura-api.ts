@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import {
+  DIMENSIONS,
   compatibilityScore,
   MATCH_THRESHOLD,
   rankDimensions,
@@ -732,7 +733,7 @@ export const suggestOpeners = createServerFn({ method: "POST" })
 
     const fallback = [
       `Your note about ${chat.other.perfectLocalDay.split(".")[0]?.toLowerCase() || "a local day"} landed. I want the longer version.`,
-      `We share ${chat.sharedDimensions[0] ?? "a frequency"}. Start there?`,
+      `We share ${chat.sharedDimensions[0] ? DIMENSIONS[chat.sharedDimensions[0]].label : "a frequency"}. Start there?`,
     ];
 
     const apiKey = process.env.XAI_API_KEY;

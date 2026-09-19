@@ -98,10 +98,21 @@ const previewAllowedHosts: string[] = [...PREVIEW_ALLOWED_HOSTS];
 // Local `npm run dev` (port 8080 contract). Browsers may send Origin as any of
 // these for the same server — trusting only `localhost` rejects `127.0.0.1` and
 // breaks email/password with "Invalid origin".
+const devPort = env("PORT") || "8080";
 const LOCAL_DEV_ORIGINS: string[] = [
+  `http://localhost:${devPort}`,
+  `http://127.0.0.1:${devPort}`,
+  `http://[::1]:${devPort}`,
   "http://localhost:8080",
   "http://127.0.0.1:8080",
   "http://[::1]:8080",
+];
+const ZO_HOST_WILDCARDS = ["*.zo.computer", "*.zocomputer.io"];
+const ZO_ORIGIN_WILDCARDS = [
+  "https://*.zo.computer",
+  "https://*.zocomputer.io",
+  "http://*.zo.computer",
+  "http://*.zocomputer.io",
 ];
 const baseURL = explicitBaseURL ?? {
   // Include loopback hosts so dynamic baseURL resolves for local email/password
@@ -116,12 +127,14 @@ const baseURL = explicitBaseURL ?? {
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
 const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS]
+  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS, ...ZO_ORIGIN_WILDCARDS]
   : [
       // Host wildcards (matched against Origin's host)
       ...previewAllowedHosts,
+      ...ZO_HOST_WILDCARDS,
       // Full-origin wildcards (matched against Origin)
       ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
+      ...ZO_ORIGIN_WILDCARDS,
       ...LOCAL_DEV_ORIGINS,
     ];
 

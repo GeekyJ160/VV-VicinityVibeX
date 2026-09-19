@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Vicinity Vibe",
+      "hasCanvas": false,
+      "bodyTextLen": 373,
+      "bodyTextHash": "067820d9c4d8951066dc498e1a11c86534d46cc62604119fb5da92f32d8d3ea6",
+      "bodyTextPrefix": "DALLAS–FORT WORTH · NEARBY Vicinity Vibe Match the frequency. A ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Vicinity Vibe",
+      "hasCanvas": false,
+      "bodyTextLen": 373,
+      "bodyTextHash": "067820d9c4d8951066dc498e1a11c86534d46cc62604119fb5da92f32d8d3ea6",
+      "bodyTextPrefix": "DALLAS–FORT WORTH · NEARBY Vicinity Vibe Match the frequency. A ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}

@@ -94,7 +94,7 @@ function Discover() {
   const shift = fly === "left" ? -140 : fly === "right" ? 140 : drag.x;
 
   return (
-    <div className="px-4 pt-4">
+    <div className="px-4 pt-4 pb-6">
       <header className="mb-3 flex items-end justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-muted">Discover</p>
@@ -123,30 +123,36 @@ function Discover() {
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
       >
-        <ProfileView person={current} />
-      </div>
-
-      <div className="sticky bottom-20 z-10 mt-4 flex items-center justify-center gap-3 pb-2">
-        <Button
-          variant="outline"
-          size="icon"
-          aria-label="Pass"
-          disabled={busy}
-          onClick={() => void act("pass")}
-        >
-          <X className="size-5" />
-        </Button>
-        <Button
-          size="lg"
-          className="min-w-36"
-          disabled={busy}
-          onClick={() => void act("spark")}
-        >
-          Spark
-        </Button>
-        <Button variant="ghost" disabled={busy} onClick={() => void navigate({ to: "/map" })}>
-          Map
-        </Button>
+        <ProfileView
+          person={current}
+          actions={
+            <div
+              className="mt-4 flex items-center justify-center gap-3"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Pass"
+                disabled={busy}
+                onClick={() => void act("pass")}
+              >
+                <X className="size-5" />
+              </Button>
+              <Button
+                size="lg"
+                className="min-w-36"
+                disabled={busy}
+                onClick={() => void act("spark")}
+              >
+                Spark
+              </Button>
+              <Button variant="ghost" disabled={busy} onClick={() => void navigate({ to: "/map" })}>
+                Map
+              </Button>
+            </div>
+          }
+        />
       </div>
 
       {match ? (

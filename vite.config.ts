@@ -1,5 +1,6 @@
-import { readdirSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, existsSync, readdirSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import type { Plugin } from "vite";
 import { defineConfig } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
@@ -145,11 +146,39 @@ function authPopupPlugin(): Plugin {
 // `0.0.0.0:8080` is the live-preview contract — don't change host/port.
 // The dev server starts once `src/router.tsx` and `src/routes/` exist — see
 // AGENTS.md § "First scaffold".
+const PGLITE_ASSETS = ["pglite.data", "pglite.wasm", "initdb.wasm"];
+
+/** Copy PGLite's runtime assets next to its bundled chunk in the server output. */
+type NitroLike = {
+  options: { output: { serverDir: string } };
+  hooks: { hook: (name: "compiled", fn: () => void) => void };
+};
+
+function copyPgliteAssets(nitro: NitroLike) {
+  const require = createRequire(import.meta.url);
+  const distDir = dirname(require.resolve("@electric-sql/pglite"));
+  const serverDir = nitro.options.output.serverDir;
+  // Nitro hoists node_modules chunks into `_libs/`; fall back to the root.
+  const libsDir = join(serverDir, "_libs");
+  const targetDir = existsSync(libsDir) ? libsDir : serverDir;
+  for (const file of PGLITE_ASSETS) {
+    copyFileSync(join(distDir, file), join(targetDir, file));
+  }
+}
+
 export default defineConfig(({ command, isPreview }) => ({
   server: {
     host: "0.0.0.0",
-    port: 8080,
+    port: Number(process.env.PORT || 8080),
     strictPort: true,
+    // Extra dev-server hosts from VITE_ALLOWED_HOSTS (comma list); default localhost only.
+    allowedHosts: [
+      "localhost",
+      ...(process.env.VITE_ALLOWED_HOSTS ?? "")
+        .split(",")
+        .map((h) => h.trim())
+        .filter(Boolean),
+    ],
   },
   preview: {
     host: "127.0.0.1",
@@ -175,6 +204,19 @@ export default defineConfig(({ command, isPreview }) => ({
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.
             serverDir: "./server",
+            // Pin the Vercel function runtime; otherwise nitro picks it from the
+            // build machine's Node (Vercel's remote builder runs Node 24).
+            vercel: { functions: { runtime: "nodejs22.x" } },
+            // PGLite loads pglite.data / *.wasm via `new URL(..., import.meta.url)`
+            // next to its bundled chunk, which nitro's bundler doesn't trace.
+            // Ship them into the server output so the in-memory DB boots. (A
+            // module hook, not `hooks:`, so the vercel preset's own `compiled`
+            // hook that writes .vc-config.json still runs.)
+            modules: [
+              (nitro: NitroLike) => {
+                nitro.hooks.hook("compiled", () => copyPgliteAssets(nitro));
+              },
+            ],
           }),
         ]
       : []),

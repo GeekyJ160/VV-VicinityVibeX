@@ -46,6 +46,7 @@ import {
   PREVIEW_CLIENT_ID,
   PREVIEW_CLIENT_SECRET,
 } from "./preview";
+import { parseTrustedOrigins } from "./trusted-origins";
 
 // Kick (and share) PGLite bootstrap as soon as the auth server module loads.
 void ensureDbReady();
@@ -107,13 +108,9 @@ const LOCAL_DEV_ORIGINS: string[] = [
   "http://127.0.0.1:8080",
   "http://[::1]:8080",
 ];
-const ZO_HOST_WILDCARDS = ["*.zo.computer", "*.zocomputer.io"];
-const ZO_ORIGIN_WILDCARDS = [
-  "https://*.zo.computer",
-  "https://*.zocomputer.io",
-  "http://*.zo.computer",
-  "http://*.zocomputer.io",
-];
+// Extra exact origins to trust (e.g. the Zo host serving this app), from
+// TRUSTED_ORIGINS as a comma list. No wildcards; defaults to none.
+const EXTRA_TRUSTED_ORIGINS = parseTrustedOrigins(env("TRUSTED_ORIGINS"));
 const baseURL = explicitBaseURL ?? {
   // Include loopback hosts so dynamic baseURL resolves for local email/password
   // (not only the preview wildcard).
@@ -127,14 +124,13 @@ const baseURL = explicitBaseURL ?? {
 // Origins Better Auth accepts on credentialed POSTs (sign-up/sign-in, etc.).
 // Missing entries here surface as FORBIDDEN "Invalid origin".
 const trustedOrigins: string[] = explicitBaseURL
-  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS, ...ZO_ORIGIN_WILDCARDS]
+  ? [explicitBaseURL, ...LOCAL_DEV_ORIGINS, ...EXTRA_TRUSTED_ORIGINS]
   : [
       // Host wildcards (matched against Origin's host)
       ...previewAllowedHosts,
-      ...ZO_HOST_WILDCARDS,
       // Full-origin wildcards (matched against Origin)
       ...previewAllowedHosts.flatMap((host) => [`https://${host}`, `http://${host}`]),
-      ...ZO_ORIGIN_WILDCARDS,
+      ...EXTRA_TRUSTED_ORIGINS,
       ...LOCAL_DEV_ORIGINS,
     ];
 

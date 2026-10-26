@@ -150,7 +150,14 @@ export default defineConfig(({ command, isPreview }) => ({
     host: "0.0.0.0",
     port: Number(process.env.PORT || 8080),
     strictPort: true,
-    allowedHosts: true,
+    // Extra dev-server hosts from VITE_ALLOWED_HOSTS (comma list); default localhost only.
+    allowedHosts: [
+      "localhost",
+      ...(process.env.VITE_ALLOWED_HOSTS ?? "")
+        .split(",")
+        .map((h) => h.trim())
+        .filter(Boolean),
+    ],
   },
   preview: {
     host: "127.0.0.1",

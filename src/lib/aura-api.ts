@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import { validateMessageText } from "@/lib/chat/live-chat";
 import {
   DIMENSIONS,
   compatibilityScore,
@@ -443,6 +444,7 @@ async function loadChat(chatId: string, userId: string) {
   const row = match[0];
   if (!row) return null;
   const otherId = row.user_a === userId ? row.user_b : row.user_a;
+  if (await isBlocked(userId, otherId)) return null;
   const other = await loadProfile(otherId);
   if (!other) return null;
   const msgs = await sql<{
@@ -463,16 +465,14 @@ async function loadChat(chatId: string, userId: string) {
     compatibility: Number(row.compat_a),
     sharedDimensions: parseJson<DimensionKey[]>(row.shared_dimensions, []),
     other,
-    messages: msgs.map(
-      (m): ChatMessage => ({
-        id: m.id,
-        chatId: m.chat_id,
-        userId: m.user_id,
-        text: m.text,
-        vibeReaction: m.vibe_reaction,
-        createdAt: toIso(m.created_at),
-      }),
-    ),
+    messages: msgs.map((m): ChatMessage => ({
+      id: m.id,
+      chatId: m.chat_id,
+      userId: m.user_id,
+      text: m.text,
+      vibeReaction: m.vibe_reaction,
+      createdAt: toIso(m.created_at),
+    })),
   };
 }
 
@@ -481,26 +481,91 @@ export const getChat = createServerFn({ method: "GET" })
   .validator((chatId: string) => chatId)
   .handler(async ({ context, data: chatId }) => loadChat(chatId, context.userId));
 
+type ChatMessageRow = {
+  id: string;
+  chat_id: string;
+  user_id: string;
+  text: string;
+  vibe_reaction: string | null;
+  created_at: unknown;
+};
+
+function toChatMessage(m: ChatMessageRow): ChatMessage {
+  return {
+    id: m.id,
+    chatId: m.chat_id,
+    userId: m.user_id,
+    text: m.text,
+    vibeReaction: m.vibe_reaction,
+    createdAt: toIso(m.created_at),
+  };
+}
+
+/** Returns the other participant if userId may use this chat (active match, no block either way). */
+async function chatPeer(chatId: string, userId: string): Promise<string | null> {
+  const sql = await getSql();
+  const rows = await sql<{ user_a: string; user_b: string }>`
+    select user_a, user_b from matches
+    where chat_id = ${chatId} and status = 'active'
+      and (user_a = ${userId} or user_b = ${userId})
+    limit 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  const otherId = row.user_a === userId ? row.user_b : row.user_a;
+  if (await isBlocked(userId, otherId)) return null;
+  return otherId;
+}
+
+/** Live-chat poll: messages created at/after `since` (client dedupes by id). */
+export const getChatMessagesSince = createServerFn({ method: "GET" })
+  .middleware([authMiddleware])
+  .validator((input: { chatId: string; since: string | null }) => {
+    if (!input || typeof input.chatId !== "string" || !input.chatId)
+      throw new Error("chatId required");
+    const since =
+      typeof input.since === "string" && !Number.isNaN(Date.parse(input.since))
+        ? input.since
+        : null;
+    return { chatId: input.chatId, since };
+  })
+  .handler(async ({ context, data }) => {
+    if (!(await chatPeer(data.chatId, context.userId)))
+      return { closed: true as const, messages: [] };
+    const sql = await getSql();
+    const rows = data.since
+      ? await sql<ChatMessageRow>`
+          select id, chat_id, user_id, text, vibe_reaction, created_at
+          from messages where chat_id = ${data.chatId} and created_at >= ${data.since}::timestamptz
+          order by created_at asc limit 200
+        `
+      : await sql<ChatMessageRow>`
+          select id, chat_id, user_id, text, vibe_reaction, created_at
+          from messages where chat_id = ${data.chatId}
+          order by created_at asc limit 200
+        `;
+    return { closed: false as const, messages: rows.map(toChatMessage) };
+  });
+
 export const sendMessage = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
-  .validator((input: { chatId: string; text: string }) => input)
+  .validator((input: { chatId: string; text: string }) => {
+    if (!input || typeof input.chatId !== "string" || !input.chatId)
+      throw new Error("chatId required");
+    const v = validateMessageText(input.text);
+    if (!v.ok) throw new Error(v.error);
+    return { chatId: input.chatId, text: v.text };
+  })
   .handler(async ({ context, data }) => {
-    const text = data.text.trim();
-    if (!text) return null;
+    if (!(await chatPeer(data.chatId, context.userId))) return null;
     const sql = await getSql();
-    const allowed = await sql<{ id: string }>`
-      select id from matches
-      where chat_id = ${data.chatId} and status = 'active'
-        and (user_a = ${context.userId} or user_b = ${context.userId})
-      limit 1
-    `;
-    if (!allowed[0]) return null;
     const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    await sql`
+    const rows = await sql<ChatMessageRow>`
       insert into messages (id, chat_id, user_id, text)
-      values (${id}, ${data.chatId}, ${context.userId}, ${text})
+      values (${id}, ${data.chatId}, ${context.userId}, ${data.text})
+      returning id, chat_id, user_id, text, vibe_reaction, created_at
     `;
-    return { id };
+    return rows[0] ? toChatMessage(rows[0]) : null;
   });
 
 export const reactToMessage = createServerFn({ method: "POST" })
@@ -613,29 +678,25 @@ export const getUniverse = createServerFn({ method: "GET" })
         activeNearby: Number(catalog.active_nearby),
         joined: Number(joined[0]?.n ?? 0) > 0,
       } satisfies Universe,
-      posts: posts.map(
-        (p): UniversePost => ({
-          id: p.id,
-          universeId: p.universe_id,
-          userId: p.user_id,
-          displayName: p.display_name,
-          emoji: p.emoji,
-          body: p.body,
-          createdAt: toIso(p.created_at),
-        }),
-      ),
-      events: events.map(
-        (e): UniverseEvent => ({
-          id: e.id,
-          universeId: e.universe_id,
-          title: e.title,
-          description: e.description,
-          location: e.location,
-          startsAt: toIso(e.starts_at),
-          going: Number(e.going) > 0,
-          goingCount: Number(e.going_count),
-        }),
-      ),
+      posts: posts.map((p): UniversePost => ({
+        id: p.id,
+        universeId: p.universe_id,
+        userId: p.user_id,
+        displayName: p.display_name,
+        emoji: p.emoji,
+        body: p.body,
+        createdAt: toIso(p.created_at),
+      })),
+      events: events.map((e): UniverseEvent => ({
+        id: e.id,
+        universeId: e.universe_id,
+        title: e.title,
+        description: e.description,
+        location: e.location,
+        startsAt: toIso(e.starts_at),
+        going: Number(e.going) > 0,
+        goingCount: Number(e.going_count),
+      })),
     };
   });
 
@@ -782,7 +843,10 @@ export const suggestOpeners = createServerFn({ method: "POST" })
       const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
       const text = body.choices?.[0]?.message?.content ?? "";
       const parsed = JSON.parse(text.replace(/```json|```/g, "").trim()) as { openers?: string[] };
-      const openers = (parsed.openers ?? []).map((s) => s.trim()).filter(Boolean).slice(0, 2);
+      const openers = (parsed.openers ?? [])
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 2);
       return { ok: true as const, openers: openers.length ? openers : fallback };
     } catch {
       return { ok: true as const, openers: fallback };
@@ -892,18 +956,16 @@ async function loadNearby(userId: string) {
     me,
     people,
     events,
-    posts: posts.map(
-      (p): NearbyPost => ({
-        id: p.id,
-        universeId: p.universe_id,
-        userId: p.user_id,
-        displayName: p.display_name,
-        emoji: p.emoji,
-        body: p.body,
-        createdAt: toIso(p.created_at),
-        universeName: universeName(p.universe_id),
-      }),
-    ),
+    posts: posts.map((p): NearbyPost => ({
+      id: p.id,
+      universeId: p.universe_id,
+      userId: p.user_id,
+      displayName: p.display_name,
+      emoji: p.emoji,
+      body: p.body,
+      createdAt: toIso(p.created_at),
+      universeName: universeName(p.universe_id),
+    })),
   };
 }
 
@@ -996,4 +1058,3 @@ export const deleteMyAccount = createServerFn({ method: "POST" })
     await sql`delete from profiles where user_id = ${id}`;
     return { ok: true as const };
   });
-

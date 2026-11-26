@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { GROK_PROVIDERS, authEnabled, signIn } from "@/lib/auth/client";
+import { grokOAuthOnHost } from "@/lib/auth/oauth-availability";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { getMyProfile } from "@/lib/aura-api";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,11 @@ export const Route = createFileRoute("/")({ component: Landing });
 function Landing() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
+  const [showOAuth, setShowOAuth] = useState(false);
+
+  useEffect(() => {
+    setShowOAuth(grokOAuthOnHost(window.location.hostname));
+  }, []);
 
   useEffect(() => {
     if (isPending || !user) return;
@@ -48,28 +54,31 @@ function Landing() {
       </header>
 
       <div className="relative mt-auto flex flex-col gap-3 pt-16">
-        {isPending ? (
-          <div className="h-12 animate-pulse rounded-lg bg-elevated" />
-        ) : user ? (
+        {user ? (
           <p className="text-sm text-muted">Taking you in…</p>
         ) : authEnabled ? (
           <>
-            {GROK_PROVIDERS.map((p) => (
-              <Button
-                key={p.providerId}
-                size="lg"
-                variant={p.providerId === "grok-google" ? "primary" : "outline"}
-                className="w-full"
-                onClick={() => void signIn(p.providerId, { callbackURL: "/" })}
-              >
-                Continue with {p.label}
-              </Button>
-            ))}
+            <Button asChild size="lg" className="w-full">
+              <Link to="/login">Continue with email</Link>
+            </Button>
+            {showOAuth
+              ? GROK_PROVIDERS.map((p) => (
+                  <Button
+                    key={p.providerId}
+                    size="lg"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => void signIn(p.providerId, { callbackURL: "/" })}
+                  >
+                    Continue with {p.label}
+                  </Button>
+                ))
+              : null}
             <Link
               to="/login"
               className="mt-1 text-center text-sm text-muted underline-offset-4 hover:text-fg hover:underline"
             >
-              Continue with email
+              New here? Create an account
             </Link>
           </>
         ) : (

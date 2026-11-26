@@ -1,0 +1,12 @@
+update profiles set photos = '["/people/maya.jpg"]'::jsonb where user_id = 'seed-maya';
+update profiles set photos = '["/people/jordan.jpg"]'::jsonb where user_id = 'seed-jordan';
+update profiles set photos = '["/people/sofia.jpg"]'::jsonb where user_id = 'seed-sofia';
+update profiles set photos = '["/people/kai.jpg"]'::jsonb where user_id = 'seed-kai';
+update profiles set photos = '["/people/amara.jpg"]'::jsonb where user_id = 'seed-amara';
+update profiles set photos = '["/people/leo.jpg"]'::jsonb where user_id = 'seed-leo';
+update profiles set photos = '["/people/nia.jpg"]'::jsonb where user_id = 'seed-nia';
+update profiles set photos = '["/people/eli.jpg"]'::jsonb where user_id = 'seed-eli';
+update profiles set photos = '["/people/priya.jpg"]'::jsonb where user_id = 'seed-priya';
+update profiles set photos = '["/people/ren.jpg"]'::jsonb where user_id = 'seed-ren';
+update profiles set photos = '["/people/lina.jpg"]'::jsonb where user_id = 'seed-lina';
+update profiles set photos = '["/people/jayce.jpg"]'::jsonb where user_id = 'seed-jayce';

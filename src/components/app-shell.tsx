@@ -16,7 +16,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col bg-bg">
-      <div className="flex-1 pb-20">{children}</div>
+      <div className="flex-1 pb-24">{children}</div>
       <nav className="fixed inset-x-0 bottom-0 z-20 mx-auto max-w-lg border-t border-border bg-bg/92 backdrop-blur-md">
         <ul className="grid grid-cols-5 px-1 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           {NAV.map((item) => {

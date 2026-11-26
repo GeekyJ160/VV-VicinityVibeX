@@ -1,1 +1,0 @@
-import{r as e}from"./useRouter-B4RdKobV.js";import{t}from"./utils-DojpP95n.js";var n=e();function r({className:e,...r}){return(0,n.jsx)(`input`,{className:t(`h-11 w-full rounded-md border border-border bg-elevated px-3 text-sm text-fg placeholder:text-subtle outline-none transition-shadow duration-150 focus-visible:ring-2 focus-visible:ring-accent/35`,e),...r})}export{r as t};

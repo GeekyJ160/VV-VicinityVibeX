@@ -1,6 +1,20 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
-import { getChat, reactToMessage, sendMessage, suggestOpeners, unmatch } from "@/lib/aura-api";
+import {
+  getChat,
+  getChatMessagesSince,
+  reactToMessage,
+  sendMessage,
+  suggestOpeners,
+  unmatch,
+} from "@/lib/aura-api";
+import {
+  MAX_MESSAGE_LENGTH,
+  POLL_INTERVAL_MS,
+  latestCursor,
+  mergeMessages,
+  validateMessageText,
+} from "@/lib/chat/live-chat";
 import {
   DIMENSIONS,
   VIBE_REACTIONS,
@@ -14,6 +28,8 @@ import { Input } from "@/components/ui/input";
 import { VibeOrb } from "@/components/vibe-orb";
 import { cn } from "@/lib/utils";
 
+type LiveMessage = ChatMessage & { status?: "pending" | "failed" };
+
 export const Route = createFileRoute("/_app/chat/$chatId")({ component: ChatPage });
 
 function ChatPage() {
@@ -21,7 +37,7 @@ function ChatPage() {
   const navigate = useNavigate();
   const me = useCurrentUser();
   const [other, setOther] = useState<Profile | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<LiveMessage[]>([]);
   const [compat, setCompat] = useState(0);
   const [shared, setShared] = useState<DimensionKey[]>([]);
   const [matchId, setMatchId] = useState<string | null>(null);
@@ -29,7 +45,10 @@ function ChatPage() {
   const [openers, setOpeners] = useState<string[] | null>(null);
   const [asking, setAsking] = useState(false);
   const [missing, setMissing] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<LiveMessage[]>([]);
+  messagesRef.current = messages;
 
   async function reload() {
     const data = await getChat({ data: chatId });
@@ -48,9 +67,40 @@ function ChatPage() {
     void reload().catch(() => setMissing(true));
   }, [chatId]);
 
+  // Near-real-time: short-poll for new messages with a since-cursor (works on serverless).
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length]);
+    if (!other || missing) return;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function poll() {
+      if (cancelled) return;
+      if (typeof document === "undefined" || document.visibilityState === "visible") {
+        try {
+          const since = latestCursor(messagesRef.current, (m) => Boolean(m.status));
+          const res = await getChatMessagesSince({ data: { chatId, since } });
+          if (cancelled) return;
+          if (res.closed) {
+            setMissing(true);
+            return;
+          }
+          setMessages((cur) => mergeMessages(cur, res.messages));
+        } catch {
+          // transient network error: try again next tick
+        }
+      }
+      timer = setTimeout(() => void poll(), POLL_INTERVAL_MS);
+    }
+    timer = setTimeout(() => void poll(), POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [chatId, other?.userId, missing]);
+
+  const lastId = messages[messages.length - 1]?.id;
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, lastId]);
 
   if (missing) {
     return (
@@ -67,13 +117,45 @@ function ChatPage() {
     return <div className="m-5 h-40 animate-pulse rounded-xl bg-elevated" />;
   }
 
-  async function send(text: string) {
-    const next = text.trim();
-    if (!next) return;
+  async function send(text: string, retryId?: string) {
+    const v = validateMessageText(text);
+    if (!v.ok) {
+      setSendError(v.error);
+      return;
+    }
+    setSendError(null);
     setDraft("");
     setOpeners(null);
-    await sendMessage({ data: { chatId, text: next } });
-    await reload();
+    const tempId = retryId ?? `tmp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const optimistic: LiveMessage = {
+      id: tempId,
+      chatId,
+      userId: me?.id ?? "",
+      text: v.text,
+      vibeReaction: null,
+      createdAt: new Date().toISOString(),
+      status: "pending",
+    };
+    setMessages((cur) => [...cur.filter((m) => m.id !== tempId), optimistic]);
+    try {
+      const saved = await sendMessage({ data: { chatId, text: v.text } });
+      if (!saved) {
+        setMessages((cur) => cur.filter((m) => m.id !== tempId));
+        setMissing(true);
+        return;
+      }
+      setMessages((cur) =>
+        mergeMessages(
+          cur.filter((m) => m.id !== tempId),
+          [saved],
+        ),
+      );
+    } catch {
+      setMessages((cur) =>
+        cur.map((m) => (m.id === tempId ? { ...m, status: "failed" as const } : m)),
+      );
+      setSendError("Message didn't send. Tap it to retry.");
+    }
   }
 
   return (
@@ -173,36 +255,46 @@ function ChatPage() {
             <div key={msg.id} className={cn("flex flex-col", mine ? "items-end" : "items-start")}>
               <div
                 className={cn(
-                  "max-w-[82%] rounded-lg px-3.5 py-2 text-sm leading-relaxed",
+                  "max-w-[82%] whitespace-pre-wrap break-words rounded-lg px-3.5 py-2 text-sm leading-relaxed",
                   mine ? "bg-accent text-accent-fg" : "bg-elevated text-fg",
+                  msg.status === "pending" && "opacity-60",
+                  msg.status === "failed" &&
+                    "cursor-pointer opacity-60 outline outline-1 outline-red-500",
                 )}
+                onClick={msg.status === "failed" ? () => void send(msg.text, msg.id) : undefined}
               >
                 {msg.text}
               </div>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {VIBE_REACTIONS.map((r) => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    className={cn(
-                      "rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide",
-                      msg.vibeReaction === r.id
-                        ? "bg-elevated text-fg"
-                        : "text-subtle hover:text-muted",
-                    )}
-                    onClick={() =>
-                      void reactToMessage({
-                        data: {
-                          messageId: msg.id,
-                          reaction: msg.vibeReaction === r.id ? null : r.id,
-                        },
-                      }).then(() => reload())
-                    }
-                  >
-                    {r.label}
-                  </button>
-                ))}
-              </div>
+              {msg.status ? (
+                <p className="mt-1 text-[10px] uppercase tracking-wide text-subtle">
+                  {msg.status === "pending" ? "Sending…" : "Not sent · tap to retry"}
+                </p>
+              ) : (
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {VIBE_REACTIONS.map((r) => (
+                    <button
+                      key={r.id}
+                      type="button"
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide",
+                        msg.vibeReaction === r.id
+                          ? "bg-elevated text-fg"
+                          : "text-subtle hover:text-muted",
+                      )}
+                      onClick={() =>
+                        void reactToMessage({
+                          data: {
+                            messageId: msg.id,
+                            reaction: msg.vibeReaction === r.id ? null : r.id,
+                          },
+                        }).then(() => reload())
+                      }
+                    >
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}
@@ -218,6 +310,8 @@ function ChatPage() {
       >
         <Input
           value={draft}
+          maxLength={MAX_MESSAGE_LENGTH}
+          aria-label="Message"
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Say something specific"
         />
@@ -225,6 +319,11 @@ function ChatPage() {
           Send
         </Button>
       </form>
+      {sendError ? (
+        <p role="alert" className="sticky bottom-16 bg-bg px-4 pb-2 text-xs text-red-500">
+          {sendError}
+        </p>
+      ) : null}
     </div>
   );
 }
